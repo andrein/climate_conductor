@@ -214,14 +214,25 @@ async def test_set_temperature_while_off_stores_but_forwards_nothing(hass):
     assert calls == []
 
 
-async def test_routing_forwards_stored_setpoint_to_new_member(hass):
-    """Switching mode carries the stored setpoint to the newly active member."""
+async def test_routing_adopts_active_member_setpoint(hass):
+    """Routing takes the new active member's own setpoint as authoritative."""
+    async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    hass.states.async_set("climate.floor", "heat", {ATTR_TEMPERATURE: 20.0})
+    ent = _conductor(hass, HVACMode.HEAT)
+    ent._attr_target_temperature = 23.0  # a stale value from another mode
+    await ent._apply_routing()
+    assert ent.target_temperature == 20.0
+
+
+async def test_routing_does_not_forward_across_modes(hass):
+    """Routing never pushes the old setpoint onto the new member (no bleed)."""
     async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
     temps = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE)
+    hass.states.async_set("climate.floor", "heat", {ATTR_TEMPERATURE: 20.0})
     ent = _conductor(hass, HVACMode.HEAT)
     ent._attr_target_temperature = 23.0
     await ent._apply_routing()
-    assert _setpoints_by_member(temps) == {"climate.floor": 23.0}
+    assert temps == []
 
 
 async def test_supports_target_temperature(hass):

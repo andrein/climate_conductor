@@ -175,7 +175,9 @@ class ClimateConductor(ClimateEntity):
                 context=self._command_context(),
             )
         if active is not None:
-            await self._forward_temperature(active)
+            # adopt the new member's own setpoint rather than bleeding the old
+            # mode's onto it; an explicit change still forwards via set_temperature
+            self._attr_target_temperature = self._active_member_attr(ATTR_TEMPERATURE)
 
     async def _forward_temperature(self, member: str) -> None:
         """Send the stored setpoint to a member, echo-tagged; no-op if unset."""

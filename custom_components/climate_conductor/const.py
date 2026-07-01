@@ -10,6 +10,7 @@ PLATFORMS: list[Platform] = [Platform.CLIMATE]
 CONF_MEMBERS = "members"
 CONF_ROUTES = "routes"  # {hvac_mode: member_entity_id}
 CONF_TEMPERATURE_SENSOR = "temperature_sensor"
+CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_HIDE_MEMBERS = "hide_members"
 
 # Context.id prefix on every command we send to members, so the member listener

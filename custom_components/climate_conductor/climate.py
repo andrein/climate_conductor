@@ -98,8 +98,12 @@ class ClimateConductor(ClimateEntity):
 
     @property
     def available(self) -> bool:
-        """Whether the entity is available."""
-        return True  # TODO: any(member available)
+        """Available while at least one member is available."""
+        return any(
+            (state := self.hass.states.get(member)) is not None
+            and state.state != STATE_UNAVAILABLE
+            for member in self.members
+        )
 
     def _active_member_attr(self, attr: str) -> Any | None:
         """Read an attribute from the active member's live state, if available."""

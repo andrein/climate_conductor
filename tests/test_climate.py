@@ -379,3 +379,25 @@ async def test_listener_ignores_inactive_member_turning_off(hass):
     await ent._member_changed(_member_event("climate.ac", "off"))
     assert ent.hvac_mode == HVACMode.HEAT
     assert calls == []
+
+
+# --- Availability ---------------------------------------------------------
+
+
+async def test_available_when_any_member_is_available(hass):
+    """The group is available while at least one member is available."""
+    hass.states.async_set("climate.floor", "off")
+    hass.states.async_set("climate.ac", "unavailable")
+    assert _conductor(hass, HVACMode.OFF).available is True
+
+
+async def test_unavailable_when_all_members_unavailable(hass):
+    """The group is unavailable only when every member is unavailable."""
+    hass.states.async_set("climate.floor", "unavailable")
+    hass.states.async_set("climate.ac", "unavailable")
+    assert _conductor(hass, HVACMode.OFF).available is False
+
+
+async def test_unavailable_when_no_member_states(hass):
+    """A member with no state at all does not count as available."""
+    assert _conductor(hass, HVACMode.OFF).available is False

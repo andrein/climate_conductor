@@ -6,13 +6,24 @@ import logging
 from typing import Any
 
 from homeassistant.components.climate import ClimateEntity, HVACMode
+from homeassistant.components.climate.const import (
+    ATTR_HVAC_MODE,
+    DOMAIN as CLIMATE_DOMAIN,
+    SERVICE_SET_HVAC_MODE,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID, UnitOfTemperature
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import Context, Event, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util.ulid import ulid_now
 
-from .const import CONF_HIDE_MEMBERS, CONF_ROUTES, CONF_TEMPERATURE_SENSOR
+from .const import (
+    CONDUCTOR_CONTEXT_PREFIX,
+    CONF_HIDE_MEMBERS,
+    CONF_ROUTES,
+    CONF_TEMPERATURE_SENSOR,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,8 +101,23 @@ class ClimateConductor(ClimateEntity):
 
     async def _apply_routing(self) -> None:
         """Drive the member for the current mode; turn the rest off."""
-        # commands must carry a CONDUCTOR_CONTEXT_PREFIX context (echo suppression)
-        raise NotImplementedError
+        active = self.active_member
+        for member in self.members:
+            target = self._attr_hvac_mode if member == active else HVACMode.OFF
+            await self.hass.services.async_call(
+                CLIMATE_DOMAIN,
+                SERVICE_SET_HVAC_MODE,
+                {ATTR_ENTITY_ID: member, ATTR_HVAC_MODE: target},
+                blocking=True,
+                context=self._command_context(),
+            )
+
+    def _command_context(self) -> Context:
+        """A context tagged so the member listener drops echoes of our writes."""
+        # Overwrite the ULID's timestamp head with our prefix; the random tail
+        # keeps it unique and the total length stays within HA's 26-char id.
+        suffix = ulid_now()[len(CONDUCTOR_CONTEXT_PREFIX) :]
+        return Context(id=f"{CONDUCTOR_CONTEXT_PREFIX}{suffix}")
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to member state changes."""

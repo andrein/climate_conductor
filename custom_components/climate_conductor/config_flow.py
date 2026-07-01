@@ -95,12 +95,6 @@ def _member_modes(hass: HomeAssistant, members: list[str]) -> dict[str, list[str
     return result
 
 
-def _member_label(hass: HomeAssistant, member: str) -> str:
-    """Friendly name for a member, falling back to its entity id."""
-    state = hass.states.get(member)
-    return state.name if state else member
-
-
 async def _seed_auto_routes(
     handler: SchemaCommonFlowHandler, user_input: dict[str, Any]
 ) -> dict[str, Any]:
@@ -111,6 +105,20 @@ async def _seed_auto_routes(
     return {**user_input, CONF_ROUTES: auto}
 
 
+def _previous_routes(handler: SchemaCommonFlowHandler) -> dict[str, str]:
+    """The routing table already stored on the entry (empty on first setup)."""
+    entry = getattr(handler.parent_handler, "config_entry", None)
+    if entry is None:
+        return {}
+    return {**entry.data, **entry.options}.get(CONF_ROUTES, {})
+
+
+def _route_default(mode: str, candidates: list[str], previous: dict[str, str]) -> str:
+    """Pre-select the previously chosen member when it is still a candidate."""
+    chosen = previous.get(str(mode))
+    return chosen if chosen in candidates else candidates[0]
+
+
 async def _routes_schema(handler: SchemaCommonFlowHandler) -> vol.Schema | None:
     """Ask only about contested modes; skip the step entirely when none exist."""
     hass = handler.parent_handler.hass
@@ -118,20 +126,14 @@ async def _routes_schema(handler: SchemaCommonFlowHandler) -> vol.Schema | None:
     _, contested = plan_routes(_member_modes(hass, members))
     if not contested:
         return None
+    previous = _previous_routes(handler)
     return vol.Schema(
         {
-            vol.Required(f"{ROUTE_PREFIX}{mode}", default=candidates[0]): (
-                selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            selector.SelectOptionDict(
-                                value=member, label=_member_label(hass, member)
-                            )
-                            for member in candidates
-                        ],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                )
+            vol.Required(
+                f"{ROUTE_PREFIX}{mode}",
+                default=_route_default(mode, candidates, previous),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(include_entities=candidates)
             )
             for mode, candidates in contested.items()
         }

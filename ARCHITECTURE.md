@@ -99,14 +99,17 @@ is shown.
 
 ## 7. Member visibility
 
-The group exposes its members (via the `entity_id`-list attribute convention the
-group platforms use) so Home Assistant's native more-info dialog renders the
-managed thermostats **under the card** — you can see, at a glance, which member
-the group is driving. This is on by default. `hide_members` is a separate toggle
-that marks the member entities hidden in the registry (`hidden_by =
-INTEGRATION`), keeping them off dashboards while they stay visible in the
-group's more-info. A member the user hid by hand is left untouched, and removing
-the helper restores visibility.
+The group exposes its members via the `entity_id`-list attribute, so Home
+Assistant's native more-info dialog renders the managed thermostats **under the
+card** when the members are not hidden.
+
+`hide_members` (on by default) marks the members hidden in the registry
+(`hidden_by = INTEGRATION`). Hidden entities are dropped from auto-generated
+dashboards and voice assistants — and, per a current Home Assistant limitation,
+from the more-info member list too; the two cannot be separated. To keep a
+grouped view while members stay hidden, reference them on a manual Lovelace card
+(explicitly-referenced hidden entities still render). A member the user hid by
+hand is left untouched, and removing the helper restores visibility.
 
 ## Non-goals (v1)
 

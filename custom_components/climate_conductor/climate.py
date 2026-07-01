@@ -21,6 +21,8 @@ from homeassistant.components.climate.const import (
     ATTR_MIN_TEMP,
     ATTR_PRESET_MODE,
     ATTR_PRESET_MODES,
+    ATTR_SWING_HORIZONTAL_MODE,
+    ATTR_SWING_HORIZONTAL_MODES,
     ATTR_SWING_MODE,
     ATTR_SWING_MODES,
     ATTR_TARGET_TEMP_HIGH,
@@ -30,6 +32,7 @@ from homeassistant.components.climate.const import (
     SERVICE_SET_FAN_MODE,
     SERVICE_SET_HVAC_MODE,
     SERVICE_SET_PRESET_MODE,
+    SERVICE_SET_SWING_HORIZONTAL_MODE,
     SERVICE_SET_SWING_MODE,
     SERVICE_SET_TEMPERATURE,
 )
@@ -82,6 +85,7 @@ class ClimateConductor(ClimateEntity):
         ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
         | ClimateEntityFeature.FAN_MODE
         | ClimateEntityFeature.SWING_MODE
+        | ClimateEntityFeature.SWING_HORIZONTAL_MODE
         | ClimateEntityFeature.PRESET_MODE
     )
 
@@ -255,6 +259,16 @@ class ClimateConductor(ClimateEntity):
         return self._active_member_attr(ATTR_SWING_MODES)
 
     @property
+    def swing_horizontal_mode(self) -> str | None:
+        """Horizontal swing mode of the active member."""
+        return self._active_member_attr(ATTR_SWING_HORIZONTAL_MODE)
+
+    @property
+    def swing_horizontal_modes(self) -> list[str] | None:
+        """Horizontal swing modes offered by the active member."""
+        return self._active_member_attr(ATTR_SWING_HORIZONTAL_MODES)
+
+    @property
     def preset_mode(self) -> str | None:
         """Preset mode of the active member."""
         return self._active_member_attr(ATTR_PRESET_MODE)
@@ -294,6 +308,13 @@ class ClimateConductor(ClimateEntity):
         """Forward a swing mode change to the active member."""
         await self._forward_to_active(
             SERVICE_SET_SWING_MODE, {ATTR_SWING_MODE: swing_mode}
+        )
+
+    async def async_set_swing_horizontal_mode(self, swing_horizontal_mode: str) -> None:
+        """Forward a horizontal swing mode change to the active member."""
+        await self._forward_to_active(
+            SERVICE_SET_SWING_HORIZONTAL_MODE,
+            {ATTR_SWING_HORIZONTAL_MODE: swing_horizontal_mode},
         )
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:

@@ -18,6 +18,8 @@ from homeassistant.components.climate.const import (
     ATTR_MIN_TEMP,
     ATTR_PRESET_MODE,
     ATTR_PRESET_MODES,
+    ATTR_SWING_HORIZONTAL_MODE,
+    ATTR_SWING_HORIZONTAL_MODES,
     ATTR_SWING_MODE,
     ATTR_SWING_MODES,
     ATTR_TARGET_TEMP_HIGH,
@@ -27,6 +29,7 @@ from homeassistant.components.climate.const import (
     SERVICE_SET_FAN_MODE,
     SERVICE_SET_HVAC_MODE,
     SERVICE_SET_PRESET_MODE,
+    SERVICE_SET_SWING_HORIZONTAL_MODE,
     SERVICE_SET_SWING_MODE,
     SERVICE_SET_TEMPERATURE,
 )
@@ -591,3 +594,32 @@ async def test_current_humidity_falls_back_to_a_member_when_off(hass):
     """Off still shows humidity from a member that reports it."""
     hass.states.async_set("climate.ac", "off", {ATTR_CURRENT_HUMIDITY: 50})
     assert _conductor(hass, HVACMode.OFF).current_humidity == 50
+
+
+async def test_swing_horizontal_passes_through(hass):
+    """swing_horizontal_mode and its list come from the active member."""
+    hass.states.async_set(
+        "climate.ac",
+        "cool",
+        {ATTR_SWING_HORIZONTAL_MODE: "on", ATTR_SWING_HORIZONTAL_MODES: ["off", "on"]},
+    )
+    ent = _conductor(hass, HVACMode.COOL)
+    assert ent.swing_horizontal_mode == "on"
+    assert ent.swing_horizontal_modes == ["off", "on"]
+
+
+async def test_supported_features_include_horizontal_swing(hass):
+    """Horizontal-swing support is mirrored from the active member."""
+    caps = ClimateEntityFeature.SWING_HORIZONTAL_MODE
+    hass.states.async_set("climate.ac", "cool", {ATTR_SUPPORTED_FEATURES: int(caps)})
+    feats = _conductor(hass, HVACMode.COOL).supported_features
+    assert feats & ClimateEntityFeature.SWING_HORIZONTAL_MODE
+
+
+async def test_set_swing_horizontal_mode_forwards_to_active_member(hass):
+    """Setting horizontal swing forwards to the active member, echo-tagged."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_SWING_HORIZONTAL_MODE)
+    await _conductor(hass, HVACMode.COOL).async_set_swing_horizontal_mode("on")
+    assert calls[0].data[ATTR_ENTITY_ID] == "climate.ac"
+    assert calls[0].data[ATTR_SWING_HORIZONTAL_MODE] == "on"
+    assert calls[0].context.id.startswith(CONDUCTOR_CONTEXT_PREFIX)

@@ -9,7 +9,7 @@
           "name": "Name",
           "members": "Member thermostats",
           "temperature_sensor": "Room temperature sensor (optional override)",
-          "hide_members": "Hide member entities from dashboards"
+          "hide_members": "Hide member entities from dashboards and the more-info list"
         }
       }
     }
@@ -20,7 +20,7 @@
         "data": {
           "members": "Member thermostats",
           "temperature_sensor": "Room temperature sensor (optional override)",
-          "hide_members": "Hide member entities from dashboards"
+          "hide_members": "Hide member entities from dashboards and the more-info list"
         }
       }
     }

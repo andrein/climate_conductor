@@ -16,7 +16,8 @@ runs at a time, so one unit can never cool while another heats.
   member.
 - Mirrors the active member's state (mode, action, setpoint, fan, …) for
   display.
-- Supports hiding the member entities from your dashboards.
+- Can hide the member entities from dashboards and the more-info list
+  (`hide_members`, off by default).
 
 ## How it works
 

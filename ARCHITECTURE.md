@@ -103,12 +103,13 @@ The group exposes its members via the `entity_id`-list attribute, so Home
 Assistant's native more-info dialog renders the managed thermostats **under the
 card** when the members are not hidden.
 
-`hide_members` (on by default) marks the members hidden in the registry
+`hide_members` (off by default) marks the members hidden in the registry
 (`hidden_by = INTEGRATION`). Hidden entities are dropped from auto-generated
 dashboards and voice assistants — and, per a current Home Assistant limitation,
-from the more-info member list too; the two cannot be separated. To keep a
-grouped view while members stay hidden, reference them on a manual Lovelace card
-(explicitly-referenced hidden entities still render). A member the user hid by
+from the more-info member list too; the two cannot be separated. It defaults off
+so the members stay under the card; enable it to declutter, and reference the
+members on a manual Lovelace card if a grouped view is still wanted (an
+explicitly-referenced hidden entity still renders). A member the user hid by
 hand is left untouched, and removing the helper restores visibility.
 
 ## Non-goals (v1)

@@ -5,14 +5,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.climate import ClimateEntity, HVACMode
+from homeassistant.components.climate import (
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACMode,
+)
 from homeassistant.components.climate.const import (
     ATTR_HVAC_MODE,
     DOMAIN as CLIMATE_DOMAIN,
     SERVICE_SET_HVAC_MODE,
+    SERVICE_SET_TEMPERATURE,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_ENTITY_ID, UnitOfTemperature
+from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import Context, Event, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
@@ -42,6 +47,7 @@ class ClimateConductor(ClimateEntity):
 
     _attr_should_poll = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialise from the config entry."""
@@ -54,6 +60,7 @@ class ClimateConductor(ClimateEntity):
         self._attr_unique_id = entry.entry_id
         self._attr_name = entry.title
         self._attr_hvac_mode = HVACMode.OFF  # authoritative; not derived from members
+        self._attr_target_temperature: float | None = None  # authoritative setpoint
 
     @property
     def members(self) -> set[str]:
@@ -96,8 +103,14 @@ class ClimateConductor(ClimateEntity):
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set a new target temperature."""
-        raise NotImplementedError  # TODO: forward to active member, echo-tagged
+        """Set a new target temperature, forwarding it to the active member."""
+        temperature = kwargs.get(ATTR_TEMPERATURE)
+        if temperature is None:
+            return
+        self._attr_target_temperature = temperature  # authoritative, even when off
+        if (member := self.active_member) is not None:
+            await self._forward_temperature(member)
+        self.async_write_ha_state()
 
     async def _apply_routing(self) -> None:
         """Drive the member for the current mode; turn the rest off."""
@@ -111,6 +124,21 @@ class ClimateConductor(ClimateEntity):
                 blocking=True,
                 context=self._command_context(),
             )
+        # carry the authoritative setpoint onto whichever member now serves the mode
+        if active is not None:
+            await self._forward_temperature(active)
+
+    async def _forward_temperature(self, member: str) -> None:
+        """Send the stored setpoint to a member, echo-tagged; no-op if unset."""
+        if self._attr_target_temperature is None:
+            return
+        await self.hass.services.async_call(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_TEMPERATURE,
+            {ATTR_ENTITY_ID: member, ATTR_TEMPERATURE: self._attr_target_temperature},
+            blocking=True,
+            context=self._command_context(),
+        )
 
     def _command_context(self) -> Context:
         """A context tagged so the member listener drops echoes of our writes."""

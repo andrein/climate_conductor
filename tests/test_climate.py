@@ -6,13 +6,14 @@ Routing, setpoint forwarding and the member listener get tests as they land.
 
 from __future__ import annotations
 
-from homeassistant.components.climate import HVACMode
+from homeassistant.components.climate import ClimateEntityFeature, HVACMode
 from homeassistant.components.climate.const import (
     ATTR_HVAC_MODE,
     DOMAIN as CLIMATE_DOMAIN,
     SERVICE_SET_HVAC_MODE,
+    SERVICE_SET_TEMPERATURE,
 )
-from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE
 from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.climate_conductor.climate import ClimateConductor
@@ -44,8 +45,14 @@ def _conductor(hass, mode, routes=None):
     """A conductor wired to hass, parked in `mode`, ready for _apply_routing()."""
     ent = ClimateConductor(_FakeEntry(routes or _ROUTES))
     ent.hass = hass
+    ent.entity_id = "climate.conductor"  # so async_write_ha_state() can run
     ent._attr_hvac_mode = mode
     return ent
+
+
+def _setpoints_by_member(calls):
+    """Map member entity_id -> the temperature each was commanded to."""
+    return {c.data[ATTR_ENTITY_ID]: c.data[ATTR_TEMPERATURE] for c in calls}
 
 
 def _modes_by_member(calls):
@@ -164,3 +171,54 @@ async def test_routing_commands_one_call_per_member(hass):
         "climate.ac",
         "climate.floor",
     ]
+
+
+# --- Setpoint forwarding (async_set_temperature) --------------------------
+
+
+async def test_set_temperature_forwards_to_active_member(hass):
+    """The setpoint is forwarded to the member serving the current mode."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE)
+    await _conductor(hass, HVACMode.HEAT).async_set_temperature(temperature=21.5)
+    assert _setpoints_by_member(calls) == {"climate.floor": 21.5}
+
+
+async def test_set_temperature_becomes_authoritative_state(hass):
+    """The group stores the setpoint as its own target_temperature."""
+    async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE)
+    ent = _conductor(hass, HVACMode.COOL)
+    await ent.async_set_temperature(temperature=19.0)
+    assert ent.target_temperature == 19.0
+
+
+async def test_set_temperature_forwarding_carries_echo_context(hass):
+    """The forwarded setpoint is echo-tagged like every other command."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE)
+    await _conductor(hass, HVACMode.HEAT).async_set_temperature(temperature=20.0)
+    assert calls
+    assert all(c.context.id.startswith(CONDUCTOR_CONTEXT_PREFIX) for c in calls)
+
+
+async def test_set_temperature_while_off_stores_but_forwards_nothing(hass):
+    """With no active member, the setpoint is remembered but sent to no one."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE)
+    ent = _conductor(hass, HVACMode.OFF)
+    await ent.async_set_temperature(temperature=22.0)
+    assert ent.target_temperature == 22.0
+    assert calls == []
+
+
+async def test_routing_forwards_stored_setpoint_to_new_member(hass):
+    """Switching mode carries the stored setpoint to the newly active member."""
+    async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    temps = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE)
+    ent = _conductor(hass, HVACMode.HEAT)
+    ent._attr_target_temperature = 23.0
+    await ent._apply_routing()
+    assert _setpoints_by_member(temps) == {"climate.floor": 23.0}
+
+
+async def test_supports_target_temperature(hass):
+    """The entity advertises target-temperature support."""
+    ent = _conductor(hass, HVACMode.HEAT)
+    assert ent.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE

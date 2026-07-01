@@ -20,6 +20,7 @@ import voluptuous as vol
 
 from .const import (
     CONF_HIDE_MEMBERS,
+    CONF_HUMIDITY_SENSOR,
     CONF_MEMBERS,
     CONF_ROUTES,
     CONF_TEMPERATURE_SENSOR,
@@ -40,15 +41,29 @@ _MODE_ORDER = [
     HVACMode.FAN_ONLY,
 ]
 
+
+def _source_selector(device_class: SensorDeviceClass) -> selector.EntitySelector:
+    """A picker for a matching sensor or any climate entity (a source override)."""
+    return selector.EntitySelector(
+        selector.EntitySelectorConfig(
+            filter=[
+                selector.EntityFilterSelectorConfig(
+                    domain=SENSOR_DOMAIN, device_class=device_class
+                ),
+                selector.EntityFilterSelectorConfig(domain=CLIMATE_DOMAIN),
+            ]
+        )
+    )
+
+
 BASE_SCHEMA = {
     vol.Required(CONF_MEMBERS): selector.EntitySelector(
         selector.EntitySelectorConfig(domain=CLIMATE_DOMAIN, multiple=True),
     ),
-    vol.Optional(CONF_TEMPERATURE_SENSOR): selector.EntitySelector(
-        selector.EntitySelectorConfig(
-            domain=SENSOR_DOMAIN, device_class=SensorDeviceClass.TEMPERATURE
-        ),
+    vol.Optional(CONF_TEMPERATURE_SENSOR): _source_selector(
+        SensorDeviceClass.TEMPERATURE
     ),
+    vol.Optional(CONF_HUMIDITY_SENSOR): _source_selector(SensorDeviceClass.HUMIDITY),
     vol.Required(CONF_HIDE_MEMBERS, default=False): selector.BooleanSelector(),
 }
 

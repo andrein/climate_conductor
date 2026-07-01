@@ -11,6 +11,7 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.components.climate.const import (
+    ATTR_CURRENT_HUMIDITY,
     ATTR_CURRENT_TEMPERATURE,
     ATTR_FAN_MODE,
     ATTR_FAN_MODES,
@@ -54,6 +55,7 @@ from homeassistant.util.ulid import ulid_now
 from .const import (
     CONDUCTOR_CONTEXT_PREFIX,
     CONF_HIDE_MEMBERS,
+    CONF_HUMIDITY_SENSOR,
     CONF_ROUTES,
     CONF_TEMPERATURE_SENSOR,
 )
@@ -89,6 +91,7 @@ class ClimateConductor(ClimateEntity):
         options = {**entry.data, **entry.options}
         self._routes: dict[str, str] = dict(options.get(CONF_ROUTES, {}))
         self._temperature_sensor: str | None = options.get(CONF_TEMPERATURE_SENSOR)
+        self._humidity_sensor: str | None = options.get(CONF_HUMIDITY_SENSOR)
         self._hide_members: bool = options.get(CONF_HIDE_MEMBERS, False)
 
         self._attr_unique_id = entry.entry_id
@@ -138,17 +141,47 @@ class ClimateConductor(ClimateEntity):
             return None
         return state.attributes.get(attr)
 
+    def _read_measurement(self, entity_id: str, attr: str) -> float | None:
+        """Read a value from a sensor (its state) or a climate entity (attribute)."""
+        state = self.hass.states.get(entity_id)
+        if state is None:
+            return None
+        if (value := state.attributes.get(attr)) is not None:
+            return value  # a climate entity carries the reading as an attribute
+        try:
+            return float(state.state)
+        except (ValueError, TypeError):
+            return None
+
+    def _any_member_attr(self, attr: str) -> Any | None:
+        """Read an attribute from the first member that reports it."""
+        for member in sorted(self.members):
+            state = self.hass.states.get(member)
+            if state is not None and (value := state.attributes.get(attr)) is not None:
+                return value
+        return None
+
+    def _room_reading(self, attr: str) -> Any | None:
+        """The active member's reading, or any member's — the room value doesn't
+        depend on which mode is running, so it survives the group being off."""
+        value = self._active_member_attr(attr)
+        return value if value is not None else self._any_member_attr(attr)
+
     @property
     def current_temperature(self) -> float | None:
-        """Current temperature: override sensor if configured, else active member."""
+        """Override source if configured (sensor or climate), else a member."""
         if self._temperature_sensor:
-            state = self.hass.states.get(self._temperature_sensor)
-            if state is not None:
-                try:
-                    return float(state.state)
-                except (ValueError, TypeError):
-                    return None
-        return self._active_member_attr(ATTR_CURRENT_TEMPERATURE)
+            return self._read_measurement(
+                self._temperature_sensor, ATTR_CURRENT_TEMPERATURE
+            )
+        return self._room_reading(ATTR_CURRENT_TEMPERATURE)
+
+    @property
+    def current_humidity(self) -> float | None:
+        """Configured humidity source (sensor or climate), else a member."""
+        if self._humidity_sensor:
+            return self._read_measurement(self._humidity_sensor, ATTR_CURRENT_HUMIDITY)
+        return self._room_reading(ATTR_CURRENT_HUMIDITY)
 
     @property
     def target_temperature(self) -> float | None:

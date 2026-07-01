@@ -8,7 +8,8 @@
         "data": {
           "name": "Name",
           "members": "Member thermostats",
-          "temperature_sensor": "Room temperature sensor (optional override)",
+          "temperature_sensor": "Room temperature source (sensor or thermostat, optional)",
+          "humidity_sensor": "Room humidity source (sensor or thermostat, optional)",
           "hide_members": "Hide member entities"
         },
         "data_description": {
@@ -34,7 +35,8 @@
       "init": {
         "data": {
           "members": "Member thermostats",
-          "temperature_sensor": "Room temperature sensor (optional override)",
+          "temperature_sensor": "Room temperature source (sensor or thermostat, optional)",
+          "humidity_sensor": "Room humidity source (sensor or thermostat, optional)",
           "hide_members": "Hide member entities"
         },
         "data_description": {

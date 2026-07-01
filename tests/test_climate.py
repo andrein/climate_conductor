@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from homeassistant.components.climate import ClimateEntityFeature, HVACMode
 from homeassistant.components.climate.const import (
+    ATTR_CURRENT_HUMIDITY,
     ATTR_CURRENT_TEMPERATURE,
     ATTR_FAN_MODE,
     ATTR_FAN_MODES,
@@ -40,6 +41,7 @@ from pytest_homeassistant_custom_component.common import async_mock_service
 from custom_components.climate_conductor.climate import ClimateConductor
 from custom_components.climate_conductor.const import (
     CONDUCTOR_CONTEXT_PREFIX,
+    CONF_HUMIDITY_SENSOR,
     CONF_ROUTES,
     CONF_TEMPERATURE_SENSOR,
 )
@@ -538,3 +540,54 @@ async def test_set_temperature_range_forwards_to_active_member(hass):
     assert calls[0].data[ATTR_TARGET_TEMP_LOW] == 19.0
     assert calls[0].data[ATTR_TARGET_TEMP_HIGH] == 24.0
     assert calls[0].context.id.startswith(CONDUCTOR_CONTEXT_PREFIX)
+
+
+# --- Temperature / humidity sources ---------------------------------------
+
+
+async def test_current_temperature_from_climate_override(hass):
+    """A climate entity as override contributes its current_temperature."""
+    hass.states.async_set("climate.floor", "heat", {ATTR_CURRENT_TEMPERATURE: 19.5})
+    hass.states.async_set("climate.reference", "heat", {ATTR_CURRENT_TEMPERATURE: 21.7})
+    ent = ClimateConductor(
+        _FakeEntry(_ROUTES, {CONF_TEMPERATURE_SENSOR: "climate.reference"})
+    )
+    ent.hass = hass
+    ent.entity_id = "climate.conductor"
+    ent._attr_hvac_mode = HVACMode.HEAT
+    assert ent.current_temperature == 21.7
+
+
+async def test_current_humidity_from_sensor(hass):
+    """A configured humidity sensor drives current_humidity."""
+    hass.states.async_set("sensor.room_hum", "48")
+    ent = ClimateConductor(
+        _FakeEntry(_ROUTES, {CONF_HUMIDITY_SENSOR: "sensor.room_hum"})
+    )
+    ent.hass = hass
+    ent.entity_id = "climate.conductor"
+    ent._attr_hvac_mode = HVACMode.COOL
+    assert ent.current_humidity == 48.0
+
+
+async def test_current_humidity_mirrors_active_member(hass):
+    """Without an override, current_humidity comes from the active member."""
+    hass.states.async_set("climate.ac", "cool", {ATTR_CURRENT_HUMIDITY: 55})
+    assert _conductor(hass, HVACMode.COOL).current_humidity == 55
+
+
+async def test_current_humidity_none_when_off_and_no_sensor(hass):
+    """No active member and no override means no humidity to show."""
+    assert _conductor(hass, HVACMode.OFF).current_humidity is None
+
+
+async def test_current_temperature_falls_back_to_a_member_when_off(hass):
+    """Off has no active member, but the room reading still comes from a member."""
+    hass.states.async_set("climate.floor", "off", {ATTR_CURRENT_TEMPERATURE: 20.0})
+    assert _conductor(hass, HVACMode.OFF).current_temperature == 20.0
+
+
+async def test_current_humidity_falls_back_to_a_member_when_off(hass):
+    """Off still shows humidity from a member that reports it."""
+    hass.states.async_set("climate.ac", "off", {ATTR_CURRENT_HUMIDITY: 50})
+    assert _conductor(hass, HVACMode.OFF).current_humidity == 50

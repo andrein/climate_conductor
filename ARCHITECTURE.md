@@ -90,12 +90,12 @@ routing.
   off) → the group keeps its selected mode, sits idle, and self-heals when the
   member returns. (Contrast with a deliberate `off`, which takes the group off.)
 
-## 6. Current temperature
+## 6. Current temperature and humidity
 
-`current_temperature` comes from the active member's own reading, unless an
-explicit temperature-sensor override is configured (which then wins). When the
-group is off there is no active member, so only the override — if configured —
-is shown.
+`current_temperature` and `current_humidity` come from a configured source
+override (a sensor, or a climate entity's own reading) when set; otherwise from
+the active member, falling back to any member. The room reading doesn't depend
+on which mode is running, so it still shows while the group is off.
 
 ## 7. Member visibility
 

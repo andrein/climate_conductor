@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from homeassistant.components.climate import ClimateEntityFeature, HVACMode
 from homeassistant.components.climate.const import (
+    ATTR_CURRENT_TEMPERATURE,
     ATTR_HVAC_MODE,
+    ATTR_MAX_TEMP,
+    ATTR_MIN_TEMP,
+    ATTR_TARGET_TEMP_STEP,
     DOMAIN as CLIMATE_DOMAIN,
     SERVICE_SET_HVAC_MODE,
     SERVICE_SET_TEMPERATURE,
@@ -20,6 +24,7 @@ from custom_components.climate_conductor.climate import ClimateConductor
 from custom_components.climate_conductor.const import (
     CONDUCTOR_CONTEXT_PREFIX,
     CONF_ROUTES,
+    CONF_TEMPERATURE_SENSOR,
 )
 
 
@@ -222,3 +227,57 @@ async def test_supports_target_temperature(hass):
     """The entity advertises target-temperature support."""
     ent = _conductor(hass, HVACMode.HEAT)
     assert ent.supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
+
+
+# --- Mirroring the active member for display -------------------------------
+
+
+async def test_current_temperature_mirrors_active_member(hass):
+    """current_temperature comes from the member serving the mode."""
+    hass.states.async_set("climate.floor", "heat", {ATTR_CURRENT_TEMPERATURE: 19.5})
+    assert _conductor(hass, HVACMode.HEAT).current_temperature == 19.5
+
+
+async def test_current_temperature_prefers_override_sensor(hass):
+    """A configured temperature-sensor override wins over the member reading."""
+    hass.states.async_set("climate.floor", "heat", {ATTR_CURRENT_TEMPERATURE: 19.5})
+    hass.states.async_set("sensor.room", "21.2")
+    ent = ClimateConductor(
+        _FakeEntry(_ROUTES, {CONF_TEMPERATURE_SENSOR: "sensor.room"})
+    )
+    ent.hass = hass
+    ent.entity_id = "climate.conductor"
+    ent._attr_hvac_mode = HVACMode.HEAT
+    assert ent.current_temperature == 21.2
+
+
+async def test_current_temperature_none_when_off(hass):
+    """With no active member there is no reading to mirror."""
+    assert _conductor(hass, HVACMode.OFF).current_temperature is None
+
+
+async def test_target_temperature_falls_back_to_active_member(hass):
+    """Before the group owns a setpoint, it shows the active member's."""
+    hass.states.async_set("climate.floor", "heat", {ATTR_TEMPERATURE: 21.0})
+    assert _conductor(hass, HVACMode.HEAT).target_temperature == 21.0
+
+
+async def test_target_temperature_prefers_authoritative_value(hass):
+    """Once the group owns a setpoint, that wins over the member's."""
+    hass.states.async_set("climate.floor", "heat", {ATTR_TEMPERATURE: 21.0})
+    ent = _conductor(hass, HVACMode.HEAT)
+    ent._attr_target_temperature = 23.0
+    assert ent.target_temperature == 23.0
+
+
+async def test_temperature_bounds_mirror_active_member(hass):
+    """min/max/step come from the active member so the UI slider matches it."""
+    hass.states.async_set(
+        "climate.floor",
+        "heat",
+        {ATTR_MIN_TEMP: 5, ATTR_MAX_TEMP: 30, ATTR_TARGET_TEMP_STEP: 0.5},
+    )
+    ent = _conductor(hass, HVACMode.HEAT)
+    assert ent.min_temp == 5
+    assert ent.max_temp == 30
+    assert ent.target_temperature_step == 0.5

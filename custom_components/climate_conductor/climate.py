@@ -11,7 +11,11 @@ from homeassistant.components.climate import (
     HVACMode,
 )
 from homeassistant.components.climate.const import (
+    ATTR_CURRENT_TEMPERATURE,
     ATTR_HVAC_MODE,
+    ATTR_MAX_TEMP,
+    ATTR_MIN_TEMP,
+    ATTR_TARGET_TEMP_STEP,
     DOMAIN as CLIMATE_DOMAIN,
     SERVICE_SET_HVAC_MODE,
     SERVICE_SET_TEMPERATURE,
@@ -91,10 +95,50 @@ class ClimateConductor(ClimateEntity):
         """Whether the entity is available."""
         return True  # TODO: any(member available)
 
+    def _active_member_attr(self, attr: str) -> Any | None:
+        """Read an attribute from the active member's live state, if available."""
+        if (member := self.active_member) is None:
+            return None
+        if (state := self.hass.states.get(member)) is None:
+            return None
+        return state.attributes.get(attr)
+
     @property
     def current_temperature(self) -> float | None:
-        """Current temperature."""
-        return None  # TODO: override sensor, else active member, else fallback
+        """Current temperature: override sensor if configured, else active member."""
+        if self._temperature_sensor:
+            state = self.hass.states.get(self._temperature_sensor)
+            if state is not None:
+                try:
+                    return float(state.state)
+                except (ValueError, TypeError):
+                    return None
+        return self._active_member_attr(ATTR_CURRENT_TEMPERATURE)
+
+    @property
+    def target_temperature(self) -> float | None:
+        """Our authoritative setpoint, falling back to the active member's."""
+        if self._attr_target_temperature is not None:
+            return self._attr_target_temperature
+        return self._active_member_attr(ATTR_TEMPERATURE)
+
+    @property
+    def min_temp(self) -> float:
+        """Minimum settable temperature, mirrored from the active member."""
+        value = self._active_member_attr(ATTR_MIN_TEMP)
+        return value if value is not None else super().min_temp
+
+    @property
+    def max_temp(self) -> float:
+        """Maximum settable temperature, mirrored from the active member."""
+        value = self._active_member_attr(ATTR_MAX_TEMP)
+        return value if value is not None else super().max_temp
+
+    @property
+    def target_temperature_step(self) -> float | None:
+        """Setpoint step, mirrored from the active member."""
+        value = self._active_member_attr(ATTR_TARGET_TEMP_STEP)
+        return value if value is not None else super().target_temperature_step
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set a new HVAC mode."""

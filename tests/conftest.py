@@ -1,4 +1,5 @@
 """Shared test fixtures for Climate Conductor."""
+
 import pytest
 
 

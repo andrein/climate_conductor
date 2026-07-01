@@ -1,8 +1,6 @@
 # Climate Conductor — Architecture
 
-This document is the design of record. It captures decisions made deliberately,
-several of them in reaction to concrete failures observed in the integrations
-that inspired this one.
+Design of record: the routing model and the behaviour that follows from it.
 
 ## 1. Router, not regulator
 
@@ -10,12 +8,12 @@ The members (e.g. an AC, a hydronic floor thermostat) are already full
 `climate` entities that **regulate themselves**. Climate Conductor therefore
 does **no** temperature-comparison logic of its own:
 
-- It **owns** the selected `hvac_mode` and setpoint as **authoritative state**.
-  It never re-derives its mode from the members' current states — deriving is
-  what made an inspiring integration collapse to `off` (or drop modes) whenever
-  a member was off/suppressed.
-- On a command it **forwards** the mode + setpoint to the single member that
-  serves the mode, and **turns every other member off**.
+- It **owns** the selected `hvac_mode` as **authoritative state**, never
+  re-derived from the members' current states.
+- On a mode change it drives the single member that serves the mode and **turns
+  every other member off**, then **adopts that member's own setpoint** (each
+  device keeps its per-mode setpoint). A setpoint set on the group is forwarded
+  to the active member and held as authoritative until the next mode change.
 - It **mirrors** the active member's state (mode/action/setpoint/fan/…) back for
   display.
 
@@ -34,7 +32,7 @@ The stored config (`CONF_ROUTES`) **is** the runtime model — no heaters/cooler
 lists, no isolation rules, no priority side-tables. The set of members is
 derived from the table (`set(routes.values())`).
 
-**Config flow (planned):**
+**Config flow:**
 1. Pick member entities, an optional temperature-sensor override, and the
    hide-members toggle.
 2. Seed a route for every mode the members collectively support, defaulting to
@@ -78,8 +76,7 @@ Every service call the conductor issues to a member carries a `Context` whose id
 is prefixed with `CONDUCTOR_CONTEXT_PREFIX`. The listener ignores any event
 whose context is one of ours. Without this, the conductor's own "turn the other
 member off" commands would be read as fresh out-of-band changes and re-trigger
-routing — the exact feedback loop that turned an inspiring integration into an
-event-bus storm.
+routing.
 
 ## 5. Availability
 
@@ -97,7 +94,8 @@ event-bus storm.
 
 `current_temperature` comes from the active member's own reading, unless an
 explicit temperature-sensor override is configured (which then wins). When the
-group is off, fall back to a primary/available member or the override.
+group is off there is no active member, so only the override — if configured —
+is shown.
 
 ## 7. Member visibility
 
@@ -105,8 +103,10 @@ The group exposes its members (via the `entity_id`-list attribute convention the
 group platforms use) so Home Assistant's native more-info dialog renders the
 managed thermostats **under the card** — you can see, at a glance, which member
 the group is driving. This is on by default. `hide_members` is a separate toggle
-that only controls whether the members clutter your **dashboards**; even when
-hidden they remain visible inside the group's more-info.
+that marks the member entities hidden in the registry (`hidden_by =
+INTEGRATION`), keeping them off dashboards while they stay visible in the
+group's more-info. A member the user hid by hand is left untouched, and removing
+the helper restores visibility.
 
 ## Non-goals (v1)
 

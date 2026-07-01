@@ -153,21 +153,35 @@ class ClimateConductor(ClimateEntity):
         except (ValueError, TypeError):
             return None
 
+    def _any_member_attr(self, attr: str) -> Any | None:
+        """Read an attribute from the first member that reports it."""
+        for member in sorted(self.members):
+            state = self.hass.states.get(member)
+            if state is not None and (value := state.attributes.get(attr)) is not None:
+                return value
+        return None
+
+    def _room_reading(self, attr: str) -> Any | None:
+        """The active member's reading, or any member's — the room value doesn't
+        depend on which mode is running, so it survives the group being off."""
+        value = self._active_member_attr(attr)
+        return value if value is not None else self._any_member_attr(attr)
+
     @property
     def current_temperature(self) -> float | None:
-        """Override source if configured (sensor or climate), else active member."""
+        """Override source if configured (sensor or climate), else a member."""
         if self._temperature_sensor:
             return self._read_measurement(
                 self._temperature_sensor, ATTR_CURRENT_TEMPERATURE
             )
-        return self._active_member_attr(ATTR_CURRENT_TEMPERATURE)
+        return self._room_reading(ATTR_CURRENT_TEMPERATURE)
 
     @property
     def current_humidity(self) -> float | None:
-        """Configured humidity source (sensor or climate), else active member."""
+        """Configured humidity source (sensor or climate), else a member."""
         if self._humidity_sensor:
             return self._read_measurement(self._humidity_sensor, ATTR_CURRENT_HUMIDITY)
-        return self._active_member_attr(ATTR_CURRENT_HUMIDITY)
+        return self._room_reading(ATTR_CURRENT_HUMIDITY)
 
     @property
     def target_temperature(self) -> float | None:

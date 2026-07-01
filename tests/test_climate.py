@@ -579,3 +579,15 @@ async def test_current_humidity_mirrors_active_member(hass):
 async def test_current_humidity_none_when_off_and_no_sensor(hass):
     """No active member and no override means no humidity to show."""
     assert _conductor(hass, HVACMode.OFF).current_humidity is None
+
+
+async def test_current_temperature_falls_back_to_a_member_when_off(hass):
+    """Off has no active member, but the room reading still comes from a member."""
+    hass.states.async_set("climate.floor", "off", {ATTR_CURRENT_TEMPERATURE: 20.0})
+    assert _conductor(hass, HVACMode.OFF).current_temperature == 20.0
+
+
+async def test_current_humidity_falls_back_to_a_member_when_off(hass):
+    """Off still shows humidity from a member that reports it."""
+    hass.states.async_set("climate.ac", "off", {ATTR_CURRENT_HUMIDITY: 50})
+    assert _conductor(hass, HVACMode.OFF).current_humidity == 50

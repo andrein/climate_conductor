@@ -19,6 +19,8 @@ from homeassistant.components.climate.const import (
     ATTR_PRESET_MODES,
     ATTR_SWING_MODE,
     ATTR_SWING_MODES,
+    ATTR_TARGET_TEMP_HIGH,
+    ATTR_TARGET_TEMP_LOW,
     ATTR_TARGET_TEMP_STEP,
     DOMAIN as CLIMATE_DOMAIN,
     SERVICE_SET_FAN_MODE,
@@ -499,3 +501,40 @@ async def test_set_preset_mode_forwards_to_active_member(hass):
     await _conductor(hass, HVACMode.COOL).async_set_preset_mode("eco")
     assert calls[0].data[ATTR_ENTITY_ID] == "climate.ac"
     assert calls[0].data[ATTR_PRESET_MODE] == "eco"
+
+
+# --- heat_cool range setpoints --------------------------------------------
+
+
+async def test_supported_features_include_range_from_active_member(hass):
+    """When the active member offers a low/high band, so does the group."""
+    caps = ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+    hass.states.async_set(
+        "climate.ac", "heat_cool", {ATTR_SUPPORTED_FEATURES: int(caps)}
+    )
+    feats = _conductor(hass, HVACMode.HEAT_COOL).supported_features
+    assert feats & ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+
+
+async def test_target_temperature_range_mirrors_active_member(hass):
+    """target_temperature_low/high come from the active member."""
+    hass.states.async_set(
+        "climate.ac",
+        "heat_cool",
+        {ATTR_TARGET_TEMP_LOW: 19.0, ATTR_TARGET_TEMP_HIGH: 24.0},
+    )
+    ent = _conductor(hass, HVACMode.HEAT_COOL)
+    assert ent.target_temperature_low == 19.0
+    assert ent.target_temperature_high == 24.0
+
+
+async def test_set_temperature_range_forwards_to_active_member(hass):
+    """A low/high setpoint is forwarded to the active member, echo-tagged."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_TEMPERATURE)
+    await _conductor(hass, HVACMode.HEAT_COOL).async_set_temperature(
+        target_temp_low=19.0, target_temp_high=24.0
+    )
+    assert calls[0].data[ATTR_ENTITY_ID] == "climate.ac"
+    assert calls[0].data[ATTR_TARGET_TEMP_LOW] == 19.0
+    assert calls[0].data[ATTR_TARGET_TEMP_HIGH] == 24.0
+    assert calls[0].context.id.startswith(CONDUCTOR_CONTEXT_PREFIX)

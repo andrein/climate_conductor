@@ -22,6 +22,8 @@ from homeassistant.components.climate.const import (
     ATTR_PRESET_MODES,
     ATTR_SWING_MODE,
     ATTR_SWING_MODES,
+    ATTR_TARGET_TEMP_HIGH,
+    ATTR_TARGET_TEMP_LOW,
     ATTR_TARGET_TEMP_STEP,
     DOMAIN as CLIMATE_DOMAIN,
     SERVICE_SET_FAN_MODE,
@@ -68,9 +70,10 @@ class ClimateConductor(ClimateEntity):
 
     _attr_should_poll = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    # We own the setpoint; fan/swing/preset are passed through from the member.
+    # We own the single setpoint; the rest is passed through from the member.
     _PASS_THROUGH_FEATURES = (
-        ClimateEntityFeature.FAN_MODE
+        ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
+        | ClimateEntityFeature.FAN_MODE
         | ClimateEntityFeature.SWING_MODE
         | ClimateEntityFeature.PRESET_MODE
     )
@@ -149,6 +152,16 @@ class ClimateConductor(ClimateEntity):
         return self._active_member_attr(ATTR_TEMPERATURE)
 
     @property
+    def target_temperature_low(self) -> float | None:
+        """Low edge of the active member's range (heat_cool)."""
+        return self._active_member_attr(ATTR_TARGET_TEMP_LOW)
+
+    @property
+    def target_temperature_high(self) -> float | None:
+        """High edge of the active member's range (heat_cool)."""
+        return self._active_member_attr(ATTR_TARGET_TEMP_HIGH)
+
+    @property
     def min_temp(self) -> float:
         """Minimum settable temperature, mirrored from the active member."""
         value = self._active_member_attr(ATTR_MIN_TEMP)
@@ -219,13 +232,19 @@ class ClimateConductor(ClimateEntity):
         self.async_write_ha_state()
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set a new target temperature, forwarding it to the active member."""
-        temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is None:
-            return
-        self._attr_target_temperature = temperature  # authoritative, even when off
-        if (member := self.active_member) is not None:
-            await self._forward_temperature(member)
+        """Set a single setpoint or a heat_cool range, forwarding to the member."""
+        member = self.active_member
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is not None:
+            self._attr_target_temperature = temperature  # authoritative, even off
+            if member is not None:
+                await self._forward_temperature(member)
+        low = kwargs.get(ATTR_TARGET_TEMP_LOW)
+        high = kwargs.get(ATTR_TARGET_TEMP_HIGH)
+        if low is not None and high is not None and member is not None:
+            await self._forward_to_active(
+                SERVICE_SET_TEMPERATURE,
+                {ATTR_TARGET_TEMP_LOW: low, ATTR_TARGET_TEMP_HIGH: high},
+            )
         self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:

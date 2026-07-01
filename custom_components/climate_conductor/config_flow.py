@@ -95,12 +95,6 @@ def _member_modes(hass: HomeAssistant, members: list[str]) -> dict[str, list[str
     return result
 
 
-def _member_label(hass: HomeAssistant, member: str) -> str:
-    """Friendly name for a member, falling back to its entity id."""
-    state = hass.states.get(member)
-    return state.name if state else member
-
-
 async def _seed_auto_routes(
     handler: SchemaCommonFlowHandler, user_input: dict[str, Any]
 ) -> dict[str, Any]:
@@ -138,18 +132,8 @@ async def _routes_schema(handler: SchemaCommonFlowHandler) -> vol.Schema | None:
             vol.Required(
                 f"{ROUTE_PREFIX}{mode}",
                 default=_route_default(mode, candidates, previous),
-            ): (
-                selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            selector.SelectOptionDict(
-                                value=member, label=_member_label(hass, member)
-                            )
-                            for member in candidates
-                        ],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                )
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(include_entities=candidates)
             )
             for mode, candidates in contested.items()
         }

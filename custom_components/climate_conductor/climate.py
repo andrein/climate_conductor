@@ -12,17 +12,28 @@ from homeassistant.components.climate import (
 )
 from homeassistant.components.climate.const import (
     ATTR_CURRENT_TEMPERATURE,
+    ATTR_FAN_MODE,
+    ATTR_FAN_MODES,
+    ATTR_HVAC_ACTION,
     ATTR_HVAC_MODE,
     ATTR_MAX_TEMP,
     ATTR_MIN_TEMP,
+    ATTR_PRESET_MODE,
+    ATTR_PRESET_MODES,
+    ATTR_SWING_MODE,
+    ATTR_SWING_MODES,
     ATTR_TARGET_TEMP_STEP,
     DOMAIN as CLIMATE_DOMAIN,
+    SERVICE_SET_FAN_MODE,
     SERVICE_SET_HVAC_MODE,
+    SERVICE_SET_PRESET_MODE,
+    SERVICE_SET_SWING_MODE,
     SERVICE_SET_TEMPERATURE,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    ATTR_SUPPORTED_FEATURES,
     ATTR_TEMPERATURE,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -57,7 +68,12 @@ class ClimateConductor(ClimateEntity):
 
     _attr_should_poll = False
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
+    # We own the setpoint; fan/swing/preset are passed through from the member.
+    _PASS_THROUGH_FEATURES = (
+        ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.SWING_MODE
+        | ClimateEntityFeature.PRESET_MODE
+    )
 
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialise from the config entry."""
@@ -150,6 +166,52 @@ class ClimateConductor(ClimateEntity):
         value = self._active_member_attr(ATTR_TARGET_TEMP_STEP)
         return value if value is not None else super().target_temperature_step
 
+    @property
+    def supported_features(self) -> ClimateEntityFeature:
+        """Our own setpoint support plus the active member's fan/swing/preset."""
+        features = ClimateEntityFeature.TARGET_TEMPERATURE
+        member_features = self._active_member_attr(ATTR_SUPPORTED_FEATURES)
+        if member_features:
+            features |= (
+                ClimateEntityFeature(member_features) & self._PASS_THROUGH_FEATURES
+            )
+        return features
+
+    @property
+    def hvac_action(self) -> Any | None:
+        """Action reported by the active member."""
+        return self._active_member_attr(ATTR_HVAC_ACTION)
+
+    @property
+    def fan_mode(self) -> str | None:
+        """Fan mode of the active member."""
+        return self._active_member_attr(ATTR_FAN_MODE)
+
+    @property
+    def fan_modes(self) -> list[str] | None:
+        """Fan modes offered by the active member."""
+        return self._active_member_attr(ATTR_FAN_MODES)
+
+    @property
+    def swing_mode(self) -> str | None:
+        """Swing mode of the active member."""
+        return self._active_member_attr(ATTR_SWING_MODE)
+
+    @property
+    def swing_modes(self) -> list[str] | None:
+        """Swing modes offered by the active member."""
+        return self._active_member_attr(ATTR_SWING_MODES)
+
+    @property
+    def preset_mode(self) -> str | None:
+        """Preset mode of the active member."""
+        return self._active_member_attr(ATTR_PRESET_MODE)
+
+    @property
+    def preset_modes(self) -> list[str] | None:
+        """Presets offered by the active member."""
+        return self._active_member_attr(ATTR_PRESET_MODES)
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set a new HVAC mode."""
         self._attr_hvac_mode = hvac_mode
@@ -165,6 +227,34 @@ class ClimateConductor(ClimateEntity):
         if (member := self.active_member) is not None:
             await self._forward_temperature(member)
         self.async_write_ha_state()
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        """Forward a fan mode change to the active member."""
+        await self._forward_to_active(SERVICE_SET_FAN_MODE, {ATTR_FAN_MODE: fan_mode})
+
+    async def async_set_swing_mode(self, swing_mode: str) -> None:
+        """Forward a swing mode change to the active member."""
+        await self._forward_to_active(
+            SERVICE_SET_SWING_MODE, {ATTR_SWING_MODE: swing_mode}
+        )
+
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        """Forward a preset change to the active member."""
+        await self._forward_to_active(
+            SERVICE_SET_PRESET_MODE, {ATTR_PRESET_MODE: preset_mode}
+        )
+
+    async def _forward_to_active(self, service: str, data: dict[str, Any]) -> None:
+        """Call a climate service on the active member, echo-tagged; no-op if off."""
+        if (member := self.active_member) is None:
+            return
+        await self.hass.services.async_call(
+            CLIMATE_DOMAIN,
+            service,
+            {ATTR_ENTITY_ID: member, **data},
+            blocking=True,
+            context=self._command_context(),
+        )
 
     async def _apply_routing(self) -> None:
         """Drive the member for the current mode; turn the rest off."""

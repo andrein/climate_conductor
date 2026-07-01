@@ -65,7 +65,7 @@ A single listener watches the members. Any change that did **not** originate
 from the conductor is normalized:
 
 - **Same mode, new setpoint/fan on the active member** → *adopt* it (update the
-  façade).
+  group's displayed state).
 - **A member switched to a different mode** → treat it as "set the group to that
   mode", then re-apply routing. Poking the AC to `heat` therefore results in the
   group going to `heat`, the **floor** turning on, and the **AC turning back

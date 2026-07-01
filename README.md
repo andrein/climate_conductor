@@ -5,12 +5,6 @@ as a single thermostat, and routes each HVAC mode to the device that serves it
 — heat to the underfloor/boiler, cool to the AC, and so on. Only one member
 runs at a time, so one unit can never cool while another heats.
 
-> **Status: early scaffold (v0.1.0).** Repository structure, the config-flow
-> skeleton, the manifest, and the design are in place. The routing engine,
-> setpoint forwarding and the member listener are **not implemented yet** —
-> see the `TODO`s in `custom_components/climate_conductor/climate.py` and
-> [`ARCHITECTURE.md`](ARCHITECTURE.md).
-
 ## What it does
 
 - Exposes one `climate` entity standing in for a group of real climate devices.
@@ -22,14 +16,17 @@ runs at a time, so one unit can never cool while another heats.
   member.
 - Mirrors the active member's state (mode, action, setpoint, fan, …) for
   display.
+- Supports hiding the member entities from your dashboards.
 
 ## How it works
 
-Climate Conductor is a **router, not a regulator**. It owns the selected mode
-and setpoint as authoritative state and never re-derives them from the members,
-so it does no temperature logic of its own — the members regulate themselves.
-The stored configuration **is** the routing table, and because only one member
-is ever active, the heat/cool interlock holds by construction. Full design:
+Climate Conductor is a **router, not a regulator**. It owns the selected HVAC
+mode as authoritative state — never re-derived from the members — and drives the
+single member that serves that mode, turning the others off. The members
+regulate themselves; the group does no temperature logic of its own and mirrors
+the active member's setpoint, action, and status back for display. The stored
+configuration **is** the routing table, and because only one member is ever
+active, the heat/cool interlock holds by construction. Full design:
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Installation

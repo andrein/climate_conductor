@@ -7,9 +7,17 @@ Routing, setpoint forwarding and the member listener get tests as they land.
 from __future__ import annotations
 
 from homeassistant.components.climate import HVACMode
+from homeassistant.components.climate.const import (
+    ATTR_HVAC_MODE,
+    DOMAIN as CLIMATE_DOMAIN,
+    SERVICE_SET_HVAC_MODE,
+)
+from homeassistant.const import ATTR_ENTITY_ID
+from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.climate_conductor.climate import ClimateConductor
 from custom_components.climate_conductor.const import (
+    CONDUCTOR_CONTEXT_PREFIX,
     CONF_ROUTES,
 )
 
@@ -22,6 +30,27 @@ class _FakeEntry:
         self.title = "Test Room"
         self.data = {CONF_ROUTES: routes}
         self.options = options or {}
+
+
+# Two self-regulating members: a hydronic floor (heat) and an AC (cool/heat_cool).
+_ROUTES = {
+    HVACMode.HEAT: "climate.floor",
+    HVACMode.COOL: "climate.ac",
+    HVACMode.HEAT_COOL: "climate.ac",
+}
+
+
+def _conductor(hass, mode, routes=None):
+    """A conductor wired to hass, parked in `mode`, ready for _apply_routing()."""
+    ent = ClimateConductor(_FakeEntry(routes or _ROUTES))
+    ent.hass = hass
+    ent._attr_hvac_mode = mode
+    return ent
+
+
+def _modes_by_member(calls):
+    """Map member entity_id -> the hvac_mode each was commanded to."""
+    return {c.data[ATTR_ENTITY_ID]: c.data[ATTR_HVAC_MODE] for c in calls}
 
 
 def test_advertised_modes_come_from_routes():
@@ -70,3 +99,68 @@ def test_members_exposed_for_more_info():
         "climate.floor",
         "climate.ac",
     }
+
+
+# --- Routing engine (_apply_routing) --------------------------------------
+
+
+async def test_routing_drives_active_member_to_the_mode(hass):
+    """The member serving the mode is commanded to that mode."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    await _conductor(hass, HVACMode.HEAT)._apply_routing()
+    assert _modes_by_member(calls)["climate.floor"] == HVACMode.HEAT
+
+
+async def test_routing_turns_the_inactive_member_off(hass):
+    """Every member that does not serve the mode is turned off (interlock)."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    await _conductor(hass, HVACMode.HEAT)._apply_routing()
+    assert _modes_by_member(calls)["climate.ac"] == HVACMode.OFF
+
+
+async def test_routing_never_has_two_members_active(hass):
+    """At most one member is ever driven to a non-off mode."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    await _conductor(hass, HVACMode.COOL)._apply_routing()
+    active = [m for m in calls if m.data[ATTR_HVAC_MODE] != HVACMode.OFF]
+    assert len(active) == 1
+    assert active[0].data[ATTR_ENTITY_ID] == "climate.ac"
+
+
+async def test_routing_off_turns_every_member_off(hass):
+    """OFF routes to no member, so all members are turned off."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    ent = _conductor(hass, HVACMode.OFF)
+    await ent._apply_routing()
+    assert _modes_by_member(calls) == {
+        "climate.floor": HVACMode.OFF,
+        "climate.ac": HVACMode.OFF,
+    }
+
+
+async def test_routing_heat_cool_uses_single_member(hass):
+    """heat_cool routes wholly to the AC; the floor is turned off."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    await _conductor(hass, HVACMode.HEAT_COOL)._apply_routing()
+    assert _modes_by_member(calls) == {
+        "climate.ac": HVACMode.HEAT_COOL,
+        "climate.floor": HVACMode.OFF,
+    }
+
+
+async def test_routing_commands_carry_echo_suppression_context(hass):
+    """Every command is tagged with our context id so the listener drops echoes."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    await _conductor(hass, HVACMode.HEAT)._apply_routing()
+    assert calls
+    assert all(c.context.id.startswith(CONDUCTOR_CONTEXT_PREFIX) for c in calls)
+
+
+async def test_routing_commands_one_call_per_member(hass):
+    """Exactly one command per member, no duplicates or omissions."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    await _conductor(hass, HVACMode.HEAT)._apply_routing()
+    assert sorted(c.data[ATTR_ENTITY_ID] for c in calls) == [
+        "climate.ac",
+        "climate.floor",
+    ]

@@ -308,8 +308,8 @@ def _member_event(entity_id, state, attrs=None, context=None):
     )
 
 
-async def test_listener_ignores_our_own_echoes(hass):
-    """An event carrying our context id is dropped — no re-route, no change."""
+async def test_listener_does_not_reroute_on_our_own_echoes(hass):
+    """An event carrying our context id must not re-route or change the mode."""
     calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
     ent = _conductor(hass, HVACMode.HEAT)
     ours = Context(id=f"{CONDUCTOR_CONTEXT_PREFIX}whatever")
@@ -317,6 +317,20 @@ async def test_listener_ignores_our_own_echoes(hass):
     await ent._member_changed(_member_event("climate.floor", "off", context=ours))
     assert ent.hvac_mode == HVACMode.HEAT
     assert calls == []
+
+
+async def test_listener_mirrors_display_on_our_own_echoes(hass):
+    """The member's settled setpoint rides in on our command's context; the
+    façade must still reflect it rather than being dropped with the echo."""
+    hass.states.async_set("climate.ac", "cool", {ATTR_TEMPERATURE: 24.0})
+    ent = _conductor(hass, HVACMode.COOL)  # AC active, no setpoint owned yet
+    ours = Context(id=f"{CONDUCTOR_CONTEXT_PREFIX}x")
+    await ent._member_changed(
+        _member_event("climate.ac", "cool", {ATTR_TEMPERATURE: 24.0}, context=ours)
+    )
+    state = hass.states.get("climate.conductor")
+    assert state is not None
+    assert state.attributes["temperature"] == 24.0
 
 
 async def test_listener_adopts_active_member_setpoint(hass):

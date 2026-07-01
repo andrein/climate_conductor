@@ -210,7 +210,10 @@ class ClimateConductor(ClimateEntity):
         """Normalize an out-of-band change on a watched member."""
         context = event.context
         if context is not None and context.id.startswith(CONDUCTOR_CONTEXT_PREFIX):
-            return  # our own echoed command; acting on it would loop
+            # the member's settled state rides in on our command's context;
+            # mirror it for display, but don't re-route (that would loop)
+            self.async_write_ha_state()
+            return
 
         new_state = event.data.get("new_state")
         if new_state is None:

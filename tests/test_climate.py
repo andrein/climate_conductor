@@ -39,7 +39,10 @@ from homeassistant.const import (
     ATTR_TEMPERATURE,
 )
 from homeassistant.core import Context, Event, State
-from pytest_homeassistant_custom_component.common import async_mock_service
+from pytest_homeassistant_custom_component.common import (
+    async_mock_service,
+    mock_restore_cache,
+)
 
 from custom_components.climate_conductor.climate import ClimateConductor
 from custom_components.climate_conductor.const import (
@@ -623,3 +626,43 @@ async def test_set_swing_horizontal_mode_forwards_to_active_member(hass):
     assert calls[0].data[ATTR_ENTITY_ID] == "climate.ac"
     assert calls[0].data[ATTR_SWING_HORIZONTAL_MODE] == "on"
     assert calls[0].context.id.startswith(CONDUCTOR_CONTEXT_PREFIX)
+
+
+# --- Restore mode/setpoint on restart -------------------------------------
+
+
+async def test_restores_mode_and_setpoint(hass):
+    """On add, the group comes back in its last mode and setpoint."""
+    mock_restore_cache(
+        hass, [State("climate.conductor", "heat", {ATTR_TEMPERATURE: 22.0})]
+    )
+    ent = _conductor(hass, HVACMode.OFF)
+    await ent.async_added_to_hass()
+    assert ent.hvac_mode == HVACMode.HEAT
+    assert ent.target_temperature == 22.0
+
+
+async def test_does_not_restore_unavailable_state(hass):
+    """A last state of unavailable/unknown is ignored; stays off."""
+    mock_restore_cache(hass, [State("climate.conductor", "unavailable", {})])
+    ent = _conductor(hass, HVACMode.OFF)
+    await ent.async_added_to_hass()
+    assert ent.hvac_mode == HVACMode.OFF
+
+
+async def test_no_previous_state_defaults_off(hass):
+    """With nothing to restore, the group starts off."""
+    mock_restore_cache(hass, [])
+    ent = _conductor(hass, HVACMode.OFF)
+    await ent.async_added_to_hass()
+    assert ent.hvac_mode == HVACMode.OFF
+
+
+async def test_restore_does_not_reroute(hass):
+    """Restoring the mode must not issue member commands."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    mock_restore_cache(hass, [State("climate.conductor", "cool", {})])
+    ent = _conductor(hass, HVACMode.OFF)
+    await ent.async_added_to_hass()
+    assert ent.hvac_mode == HVACMode.COOL
+    assert calls == []

@@ -6,6 +6,7 @@ from homeassistant.components.climate import HVACMode
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_NAME
 from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.climate_conductor.config_flow import plan_routes
 from custom_components.climate_conductor.const import (
@@ -115,3 +116,32 @@ async def test_flow_prompts_only_for_contested_mode(hass):
     entry = result["result"]
     options = {**entry.data, **entry.options}
     assert options[CONF_ROUTES] == {"cool": "climate.ac", "heat": "climate.floor"}
+
+
+async def test_options_flow_preselects_previous_contested_choice(hass):
+    """Reconfiguring defaults a contested mode to the previously chosen member."""
+    hass.states.async_set("climate.floor", "off", {"hvac_modes": ["off", "heat"]})
+    hass.states.async_set("climate.ac", "off", {"hvac_modes": ["off", "heat", "cool"]})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        options={
+            CONF_NAME: "Test Room",
+            CONF_MEMBERS: ["climate.floor", "climate.ac"],
+            CONF_HIDE_MEMBERS: False,
+            # both can heat, so heat is contested; the user previously chose the AC
+            CONF_ROUTES: {"heat": "climate.ac", "cool": "climate.ac"},
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_MEMBERS: ["climate.floor", "climate.ac"], CONF_HIDE_MEMBERS: False},
+    )
+    assert result["step_id"] == "routes"
+    key = next(
+        k for k in result["data_schema"].schema if str(k) == f"route_{HVACMode.HEAT}"
+    )
+    # first candidate is the floor; the default must be the previous choice (AC)
+    assert key.default() == "climate.ac"

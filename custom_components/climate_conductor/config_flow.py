@@ -49,7 +49,7 @@ BASE_SCHEMA = {
             domain=SENSOR_DOMAIN, device_class=SensorDeviceClass.TEMPERATURE
         ),
     ),
-    vol.Required(CONF_HIDE_MEMBERS, default=True): selector.BooleanSelector(),
+    vol.Required(CONF_HIDE_MEMBERS, default=False): selector.BooleanSelector(),
 }
 
 

@@ -1,0 +1,12 @@
+{
+  "domain": "climate_conductor",
+  "name": "Climate Conductor",
+  "codeowners": ["@andrein"],
+  "config_flow": true,
+  "documentation": "https://github.com/andrein/climate_conductor",
+  "integration_type": "helper",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/andrein/climate_conductor/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

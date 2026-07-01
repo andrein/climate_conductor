@@ -1,0 +1,28 @@
+{
+  "title": "Climate Conductor",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Climate Conductor",
+        "description": "Combine several climate entities in one room into a single thermostat.",
+        "data": {
+          "name": "Name",
+          "members": "Member thermostats",
+          "temperature_sensor": "Room temperature sensor (optional override)",
+          "hide_members": "Hide member entities from dashboards"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "members": "Member thermostats",
+          "temperature_sensor": "Room temperature sensor (optional override)",
+          "hide_members": "Hide member entities from dashboards"
+        }
+      }
+    }
+  }
+}

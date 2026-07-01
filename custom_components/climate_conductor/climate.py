@@ -21,8 +21,14 @@ from homeassistant.components.climate.const import (
     SERVICE_SET_TEMPERATURE,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE, UnitOfTemperature
-from homeassistant.core import Context, Event, HomeAssistant, callback
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    ATTR_TEMPERATURE,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+    UnitOfTemperature,
+)
+from homeassistant.core import Context, Event, HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util.ulid import ulid_now
@@ -64,7 +70,7 @@ class ClimateConductor(ClimateEntity):
         self._attr_unique_id = entry.entry_id
         self._attr_name = entry.title
         self._attr_hvac_mode = HVACMode.OFF  # authoritative; not derived from members
-        self._attr_target_temperature: float | None = None  # authoritative setpoint
+        self._attr_target_temperature: float | None = None
 
     @property
     def members(self) -> set[str]:
@@ -168,7 +174,6 @@ class ClimateConductor(ClimateEntity):
                 blocking=True,
                 context=self._command_context(),
             )
-        # carry the authoritative setpoint onto whichever member now serves the mode
         if active is not None:
             await self._forward_temperature(active)
 
@@ -199,9 +204,39 @@ class ClimateConductor(ClimateEntity):
             )
         )
 
-    @callback
-    def _member_changed(self, event: Event) -> None:
-        """Handle an out-of-band member change."""
-        # TODO: drop own echoes; adopt same-mode setpoint; re-route on mode
-        # change; group off when the active member is turned off.
+    async def _member_changed(self, event: Event) -> None:
+        """Normalize an out-of-band change on a watched member."""
+        context = event.context
+        if context is not None and context.id.startswith(CONDUCTOR_CONTEXT_PREFIX):
+            return  # our own echoed command; acting on it would loop
+
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            self.async_write_ha_state()
+            return
+
+        member_mode = new_state.state
+        is_active = event.data["entity_id"] == self.active_member
+
+        if member_mode in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            self.async_write_ha_state()
+            return
+
+        if member_mode == HVACMode.OFF:
+            if is_active:
+                self._attr_hvac_mode = HVACMode.OFF
+                await self._apply_routing()
+            self.async_write_ha_state()
+            return
+
+        if is_active and member_mode == self._attr_hvac_mode:
+            temperature = new_state.attributes.get(ATTR_TEMPERATURE)
+            if temperature is not None:
+                self._attr_target_temperature = temperature
+            self.async_write_ha_state()
+            return
+
+        if member_mode in self._routes:
+            self._attr_hvac_mode = HVACMode(member_mode)
+        await self._apply_routing()
         self.async_write_ha_state()

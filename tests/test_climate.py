@@ -18,6 +18,7 @@ from homeassistant.components.climate.const import (
     SERVICE_SET_TEMPERATURE,
 )
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE
+from homeassistant.core import Context, Event, State
 from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.climate_conductor.climate import ClimateConductor
@@ -281,3 +282,75 @@ async def test_temperature_bounds_mirror_active_member(hass):
     assert ent.min_temp == 5
     assert ent.max_temp == 30
     assert ent.target_temperature_step == 0.5
+
+
+# --- Member listener (_member_changed) ------------------------------------
+
+
+def _member_event(entity_id, state, attrs=None, context=None):
+    """A state_changed event for one member (new_state only)."""
+    new_state = State(entity_id, state, attrs or {})
+    return Event(
+        "state_changed",
+        {"entity_id": entity_id, "new_state": new_state, "old_state": None},
+        context=context,
+    )
+
+
+async def test_listener_ignores_our_own_echoes(hass):
+    """An event carrying our context id is dropped — no re-route, no change."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    ent = _conductor(hass, HVACMode.HEAT)
+    ours = Context(id=f"{CONDUCTOR_CONTEXT_PREFIX}whatever")
+    # 'floor off' would normally take the group off; our echo must not.
+    await ent._member_changed(_member_event("climate.floor", "off", context=ours))
+    assert ent.hvac_mode == HVACMode.HEAT
+    assert calls == []
+
+
+async def test_listener_adopts_active_member_setpoint(hass):
+    """Same-mode setpoint change on the active member updates the façade."""
+    ent = _conductor(hass, HVACMode.HEAT)
+    await ent._member_changed(
+        _member_event("climate.floor", "heat", {ATTR_TEMPERATURE: 22.0})
+    )
+    assert ent.target_temperature == 22.0
+
+
+async def test_listener_reroutes_when_member_poked_to_another_mode(hass):
+    """Poking a member to a different mode makes routing authoritative."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    ent = _conductor(hass, HVACMode.HEAT)  # floor active
+    await ent._member_changed(_member_event("climate.ac", "cool"))
+    assert ent.hvac_mode == HVACMode.COOL
+    assert _modes_by_member(calls) == {
+        "climate.ac": HVACMode.COOL,
+        "climate.floor": HVACMode.OFF,
+    }
+
+
+async def test_listener_takes_group_off_when_active_member_off(hass):
+    """The active member turned off deliberately takes the group off."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    ent = _conductor(hass, HVACMode.HEAT)
+    await ent._member_changed(_member_event("climate.floor", "off"))
+    assert ent.hvac_mode == HVACMode.OFF
+    assert all(m == HVACMode.OFF for m in _modes_by_member(calls).values())
+
+
+async def test_listener_keeps_mode_when_active_member_unavailable(hass):
+    """A transient unavailable keeps the mode; the group self-heals later."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    ent = _conductor(hass, HVACMode.HEAT)
+    await ent._member_changed(_member_event("climate.floor", "unavailable"))
+    assert ent.hvac_mode == HVACMode.HEAT
+    assert calls == []
+
+
+async def test_listener_ignores_inactive_member_turning_off(hass):
+    """An already-off, non-active member going off changes nothing."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_HVAC_MODE)
+    ent = _conductor(hass, HVACMode.HEAT)  # floor active, ac inactive
+    await ent._member_changed(_member_event("climate.ac", "off"))
+    assert ent.hvac_mode == HVACMode.HEAT
+    assert calls == []

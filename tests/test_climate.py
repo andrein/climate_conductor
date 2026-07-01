@@ -9,15 +9,29 @@ from __future__ import annotations
 from homeassistant.components.climate import ClimateEntityFeature, HVACMode
 from homeassistant.components.climate.const import (
     ATTR_CURRENT_TEMPERATURE,
+    ATTR_FAN_MODE,
+    ATTR_FAN_MODES,
+    ATTR_HVAC_ACTION,
     ATTR_HVAC_MODE,
     ATTR_MAX_TEMP,
     ATTR_MIN_TEMP,
+    ATTR_PRESET_MODE,
+    ATTR_PRESET_MODES,
+    ATTR_SWING_MODE,
+    ATTR_SWING_MODES,
     ATTR_TARGET_TEMP_STEP,
     DOMAIN as CLIMATE_DOMAIN,
+    SERVICE_SET_FAN_MODE,
     SERVICE_SET_HVAC_MODE,
+    SERVICE_SET_PRESET_MODE,
+    SERVICE_SET_SWING_MODE,
     SERVICE_SET_TEMPERATURE,
 )
-from homeassistant.const import ATTR_ENTITY_ID, ATTR_TEMPERATURE
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    ATTR_SUPPORTED_FEATURES,
+    ATTR_TEMPERATURE,
+)
 from homeassistant.core import Context, Event, State
 from pytest_homeassistant_custom_component.common import async_mock_service
 
@@ -401,3 +415,87 @@ async def test_unavailable_when_all_members_unavailable(hass):
 async def test_unavailable_when_no_member_states(hass):
     """A member with no state at all does not count as available."""
     assert _conductor(hass, HVACMode.OFF).available is False
+
+
+# --- Mirroring action / fan / swing / preset ------------------------------
+
+
+async def test_hvac_action_mirrors_active_member(hass):
+    """hvac_action reflects the active member's action."""
+    hass.states.async_set("climate.floor", "heat", {ATTR_HVAC_ACTION: "idle"})
+    assert _conductor(hass, HVACMode.HEAT).hvac_action == "idle"
+
+
+async def test_hvac_action_none_when_off(hass):
+    """With no active member there is no action to show."""
+    assert _conductor(hass, HVACMode.OFF).hvac_action is None
+
+
+async def test_fan_mode_and_modes_pass_through(hass):
+    """fan_mode and fan_modes come from the active member."""
+    hass.states.async_set(
+        "climate.ac", "cool", {ATTR_FAN_MODE: "high", ATTR_FAN_MODES: ["low", "high"]}
+    )
+    ent = _conductor(hass, HVACMode.COOL)
+    assert ent.fan_mode == "high"
+    assert ent.fan_modes == ["low", "high"]
+
+
+async def test_swing_and_preset_pass_through(hass):
+    """swing_mode/preset_mode and their lists come from the active member."""
+    hass.states.async_set(
+        "climate.ac",
+        "cool",
+        {
+            ATTR_SWING_MODE: "both",
+            ATTR_SWING_MODES: ["off", "both"],
+            ATTR_PRESET_MODE: "eco",
+            ATTR_PRESET_MODES: ["eco", "boost"],
+        },
+    )
+    ent = _conductor(hass, HVACMode.COOL)
+    assert ent.swing_mode == "both"
+    assert ent.swing_modes == ["off", "both"]
+    assert ent.preset_mode == "eco"
+    assert ent.preset_modes == ["eco", "boost"]
+
+
+async def test_supported_features_include_active_member_capabilities(hass):
+    """We keep our own TARGET_TEMPERATURE and add the member's fan/swing/preset."""
+    caps = ClimateEntityFeature.FAN_MODE | ClimateEntityFeature.PRESET_MODE
+    hass.states.async_set("climate.ac", "cool", {ATTR_SUPPORTED_FEATURES: int(caps)})
+    feats = _conductor(hass, HVACMode.COOL).supported_features
+    assert feats & ClimateEntityFeature.TARGET_TEMPERATURE
+    assert feats & ClimateEntityFeature.FAN_MODE
+    assert feats & ClimateEntityFeature.PRESET_MODE
+
+
+async def test_supported_features_off_is_target_temperature_only(hass):
+    """With no active member we advertise only our own setpoint support."""
+    ent = _conductor(hass, HVACMode.OFF)
+    assert ent.supported_features == ClimateEntityFeature.TARGET_TEMPERATURE
+
+
+async def test_set_fan_mode_forwards_to_active_member(hass):
+    """Setting fan mode forwards to the active member, echo-tagged."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_FAN_MODE)
+    await _conductor(hass, HVACMode.COOL).async_set_fan_mode("high")
+    assert calls[0].data[ATTR_ENTITY_ID] == "climate.ac"
+    assert calls[0].data[ATTR_FAN_MODE] == "high"
+    assert calls[0].context.id.startswith(CONDUCTOR_CONTEXT_PREFIX)
+
+
+async def test_set_swing_mode_forwards_to_active_member(hass):
+    """Setting swing mode forwards to the active member."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_SWING_MODE)
+    await _conductor(hass, HVACMode.COOL).async_set_swing_mode("both")
+    assert calls[0].data[ATTR_ENTITY_ID] == "climate.ac"
+    assert calls[0].data[ATTR_SWING_MODE] == "both"
+
+
+async def test_set_preset_mode_forwards_to_active_member(hass):
+    """Setting preset mode forwards to the active member."""
+    calls = async_mock_service(hass, CLIMATE_DOMAIN, SERVICE_SET_PRESET_MODE)
+    await _conductor(hass, HVACMode.COOL).async_set_preset_mode("eco")
+    assert calls[0].data[ATTR_ENTITY_ID] == "climate.ac"
+    assert calls[0].data[ATTR_PRESET_MODE] == "eco"

@@ -1,10 +1,10 @@
 """Config flow for Climate Conductor."""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any, cast
 
-import voluptuous as vol
 from homeassistant.components.climate import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN, SensorDeviceClass
 from homeassistant.const import CONF_NAME
@@ -13,6 +13,7 @@ from homeassistant.helpers.schema_config_entry_flow import (
     SchemaConfigFlowHandler,
     SchemaFlowFormStep,
 )
+import voluptuous as vol
 
 from .const import CONF_HIDE_MEMBERS, CONF_MEMBERS, CONF_TEMPERATURE_SENSOR, DOMAIN
 

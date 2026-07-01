@@ -3,6 +3,7 @@
 Starter tests covering the properties that already have real implementations.
 Routing, setpoint forwarding and the member listener get tests as they land.
 """
+
 from __future__ import annotations
 
 from homeassistant.components.climate import HVACMode
@@ -10,7 +11,6 @@ from homeassistant.components.climate import HVACMode
 from custom_components.climate_conductor.climate import ClimateConductor
 from custom_components.climate_conductor.const import (
     CONF_ROUTES,
-    CONF_TEMPERATURE_SENSOR,
 )
 
 

@@ -1,4 +1,5 @@
 """Climate platform for Climate Conductor."""
+
 from __future__ import annotations
 
 import logging

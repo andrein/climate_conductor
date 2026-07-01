@@ -41,7 +41,12 @@ from homeassistant.const import (
     STATE_UNKNOWN,
     UnitOfTemperature,
 )
-from homeassistant.core import Context, Event, HomeAssistant
+from homeassistant.core import (
+    Context,
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+)
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util.ulid import ulid_now
@@ -99,9 +104,10 @@ class ClimateConductor(ClimateEntity):
     @property
     def active_member(self) -> str | None:
         """Member serving the current mode, or None when off."""
-        if self._attr_hvac_mode == HVACMode.OFF:
+        mode = self._attr_hvac_mode
+        if mode is None or mode == HVACMode.OFF:
             return None
-        return self._routes.get(self._attr_hvac_mode)
+        return self._routes.get(mode)
 
     @property
     def hvac_modes(self) -> list[HVACMode]:
@@ -319,7 +325,7 @@ class ClimateConductor(ClimateEntity):
             )
         )
 
-    async def _member_changed(self, event: Event) -> None:
+    async def _member_changed(self, event: Event[EventStateChangedData]) -> None:
         """Normalize an out-of-band change on a watched member."""
         context = event.context
         if context is not None and context.id.startswith(CONDUCTOR_CONTEXT_PREFIX):

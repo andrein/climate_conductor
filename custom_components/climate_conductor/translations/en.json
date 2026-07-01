@@ -9,7 +9,10 @@
           "name": "Name",
           "members": "Member thermostats",
           "temperature_sensor": "Room temperature sensor (optional override)",
-          "hide_members": "Hide member entities from dashboards and the more-info list"
+          "hide_members": "Hide member entities"
+        },
+        "data_description": {
+          "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls."
         }
       }
     }
@@ -20,7 +23,10 @@
         "data": {
           "members": "Member thermostats",
           "temperature_sensor": "Room temperature sensor (optional override)",
-          "hide_members": "Hide member entities from dashboards and the more-info list"
+          "hide_members": "Hide member entities"
+        },
+        "data_description": {
+          "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls."
         }
       }
     }

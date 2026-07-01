@@ -14,6 +14,18 @@
         "data_description": {
           "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls."
         }
+      },
+      "routes": {
+        "title": "Assign modes to devices",
+        "description": "More than one device can serve these modes — choose which one handles each.",
+        "data": {
+          "route_heat": "Heat",
+          "route_cool": "Cool",
+          "route_heat_cool": "Heat / Cool",
+          "route_auto": "Auto",
+          "route_dry": "Dry",
+          "route_fan_only": "Fan only"
+        }
       }
     }
   },
@@ -27,6 +39,18 @@
         },
         "data_description": {
           "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls."
+        }
+      },
+      "routes": {
+        "title": "Assign modes to devices",
+        "description": "More than one device can serve these modes — choose which one handles each.",
+        "data": {
+          "route_heat": "Heat",
+          "route_cool": "Cool",
+          "route_heat_cool": "Heat / Cool",
+          "route_auto": "Auto",
+          "route_dry": "Dry",
+          "route_fan_only": "Fan only"
         }
       }
     }

@@ -53,6 +53,7 @@ from homeassistant.core import (
 )
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util.ulid import ulid_now
 
 from .const import (
@@ -75,7 +76,7 @@ async def async_setup_entry(
     async_add_entities([ClimateConductor(entry)])
 
 
-class ClimateConductor(ClimateEntity):
+class ClimateConductor(ClimateEntity, RestoreEntity):
     """Room thermostat that routes each HVAC mode to one member. See ARCHITECTURE.md."""
 
     _attr_should_poll = False
@@ -372,7 +373,16 @@ class ClimateConductor(ClimateEntity):
         return Context(id=f"{CONDUCTOR_CONTEXT_PREFIX}{suffix}")
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to member state changes."""
+        """Restore the selected mode/setpoint, then watch the members."""
+        if (last := await self.async_get_last_state()) is not None:
+            if last.state in self.hvac_modes:
+                self._attr_hvac_mode = HVACMode(last.state)
+            temperature = last.attributes.get(ATTR_TEMPERATURE)
+            if temperature is not None:
+                try:
+                    self._attr_target_temperature = float(temperature)
+                except (ValueError, TypeError):
+                    pass
         self.async_on_remove(
             async_track_state_change_event(
                 self.hass, list(self.members), self._member_changed

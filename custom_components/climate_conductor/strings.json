@@ -1,0 +1,60 @@
+{
+  "title": "Climate Conductor",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Climate Conductor",
+        "description": "Combine several climate entities in one room into a single thermostat.",
+        "data": {
+          "name": "Name",
+          "members": "Member thermostats",
+          "temperature_sensor": "Room temperature source (sensor or thermostat, optional)",
+          "humidity_sensor": "Room humidity source (sensor or thermostat, optional)",
+          "hide_members": "Hide member entities"
+        },
+        "data_description": {
+          "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls."
+        }
+      },
+      "routes": {
+        "title": "Assign modes to devices",
+        "description": "More than one device can serve these modes — choose which one handles each.",
+        "data": {
+          "route_heat": "Heat",
+          "route_cool": "Cool",
+          "route_heat_cool": "Heat / Cool",
+          "route_auto": "Auto",
+          "route_dry": "Dry",
+          "route_fan_only": "Fan only"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "members": "Member thermostats",
+          "temperature_sensor": "Room temperature source (sensor or thermostat, optional)",
+          "humidity_sensor": "Room humidity source (sensor or thermostat, optional)",
+          "hide_members": "Hide member entities"
+        },
+        "data_description": {
+          "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls."
+        }
+      },
+      "routes": {
+        "title": "Assign modes to devices",
+        "description": "More than one device can serve these modes — choose which one handles each.",
+        "data": {
+          "route_heat": "Heat",
+          "route_cool": "Cool",
+          "route_heat_cool": "Heat / Cool",
+          "route_auto": "Auto",
+          "route_dry": "Dry",
+          "route_fan_only": "Fan only"
+        }
+      }
+    }
+  }
+}

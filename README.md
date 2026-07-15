@@ -1,5 +1,8 @@
 # Climate Conductor
 
+[![CI](https://github.com/andrein/climate_conductor/actions/workflows/ci.yml/badge.svg)](https://github.com/andrein/climate_conductor/actions/workflows/ci.yml)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+
 A Home Assistant **helper** that presents several climate entities in one room
 as a single thermostat, and routes each HVAC mode to the device that serves it
 — heat to the underfloor/boiler, cool to the AC, and so on. Only one member
@@ -32,9 +35,23 @@ active, the heat/cool interlock holds by construction. Full design:
 
 ## Installation
 
+### HACS (custom repository)
+
+Add `https://github.com/andrein/climate_conductor` as a **custom repository**
+(category: Integration) in HACS, install **Climate Conductor**, and restart
+Home Assistant. [My Home Assistant shortcut][hacs-repo].
+
+### Manual
+
 Copy `custom_components/climate_conductor` into your Home Assistant
-`config/custom_components/` directory and restart. Then add it from
-**Settings → Devices & Services → Helpers → Create Helper → Climate Conductor**.
+`config/custom_components/` directory and restart.
+
+Then add it from **Settings → Devices & Services → Helpers → Create Helper →
+Climate Conductor**.
+
+Requires Home Assistant 2025.3 or newer.
+
+[hacs-repo]: https://my.home-assistant.io/redirect/hacs_repository/?owner=andrein&repository=climate_conductor&category=integration
 
 ## Development
 

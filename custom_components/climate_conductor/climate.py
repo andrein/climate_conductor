@@ -41,6 +41,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_SUPPORTED_FEATURES,
     ATTR_TEMPERATURE,
+    CONF_NAME,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfTemperature,
@@ -51,17 +52,21 @@ from homeassistant.core import (
     EventStateChangedData,
     HomeAssistant,
 )
+from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import slugify
 from homeassistant.util.ulid import ulid_now
 
 from .const import (
     CONDUCTOR_CONTEXT_PREFIX,
+    CONF_AREA,
     CONF_HIDE_MEMBERS,
     CONF_HUMIDITY_SENSOR,
     CONF_ROUTES,
     CONF_TEMPERATURE_SENSOR,
+    DOMAIN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -73,7 +78,27 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Climate Conductor entity."""
-    async_add_entities([ClimateConductor(entry)])
+    is_new = (
+        er.async_get(hass).async_get_entity_id(CLIMATE_DOMAIN, DOMAIN, entry.entry_id)
+        is None
+    )
+    # On first creation only, seed an area-prefixed object id ("mancave_thermostat")
+    # and the area to assign. Core won't area-prefix a device-less entity's id on its
+    # own; after this the registry entry is the user's and their renames/moves stick.
+    object_id: str | None = None
+    area_id: str | None = None
+    if is_new:
+        options = {**entry.data, **entry.options}
+        area = None
+        if aid := options.get(CONF_AREA):
+            area = ar.async_get(hass).async_get_area(aid)
+        if area is not None:
+            name = options.get(CONF_NAME) or entry.title
+            object_id = slugify(f"{area.name} {name}")
+            area_id = area.id
+    async_add_entities(
+        [ClimateConductor(entry, suggested_object_id=object_id, area_id=area_id)]
+    )
 
 
 class ClimateConductor(ClimateEntity, RestoreEntity):
@@ -90,7 +115,13 @@ class ClimateConductor(ClimateEntity, RestoreEntity):
         | ClimateEntityFeature.PRESET_MODE
     )
 
-    def __init__(self, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        entry: ConfigEntry,
+        *,
+        suggested_object_id: str | None = None,
+        area_id: str | None = None,
+    ) -> None:
         """Initialise from the config entry."""
         self._entry = entry
         options = {**entry.data, **entry.options}
@@ -100,9 +131,14 @@ class ClimateConductor(ClimateEntity, RestoreEntity):
         self._hide_members: bool = options.get(CONF_HIDE_MEMBERS, False)
 
         self._attr_unique_id = entry.entry_id
-        self._attr_name = entry.title
+        # the bare name is the display name; the area only prefixes the entity id
+        self._attr_name = options.get(CONF_NAME) or entry.title
         self._attr_hvac_mode = HVACMode.OFF  # authoritative; not derived from members
         self._attr_target_temperature: float | None = None
+        if suggested_object_id is not None:
+            self.entity_id = f"{CLIMATE_DOMAIN}.{suggested_object_id}"
+        # set only on first creation; afterwards the registry entry is the user's
+        self._assign_area_id = area_id
 
     @property
     def members(self) -> set[str]:
@@ -374,6 +410,12 @@ class ClimateConductor(ClimateEntity, RestoreEntity):
 
     async def async_added_to_hass(self) -> None:
         """Restore the selected mode/setpoint, then watch the members."""
+        if self._assign_area_id is not None:
+            if ar.async_get(self.hass).async_get_area(self._assign_area_id):
+                er.async_get(self.hass).async_update_entity(
+                    self.entity_id, area_id=self._assign_area_id
+                )
+            self._assign_area_id = None
         if (last := await self.async_get_last_state()) is not None:
             if last.state in self.hvac_modes:
                 self._attr_hvac_mode = HVACMode(last.state)

@@ -7,13 +7,16 @@
         "description": "Combine several climate entities in one room into a single thermostat.",
         "data": {
           "name": "Name",
+          "area": "Area",
           "members": "Member thermostats",
           "temperature_sensor": "Room temperature source (sensor or thermostat, optional)",
           "humidity_sensor": "Room humidity source (sensor or thermostat, optional)",
           "hide_members": "Hide member entities"
         },
         "data_description": {
-          "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls."
+          "hide_members": "Removes the individual devices from dashboards and from the thermostat's pop-up controls.",
+          "name": "Shown as the thermostat's name. Defaults to Thermostat.",
+          "area": "The thermostat is placed in this area, and its entity ID is generated from the area and name."
         }
       },
       "routes": {
@@ -28,6 +31,9 @@
           "route_fan_only": "Fan only"
         }
       }
+    },
+    "error": {
+      "member_already_claimed": "One or more selected thermostats already belong to another Climate Conductor."
     }
   },
   "options": {
@@ -55,6 +61,9 @@
           "route_fan_only": "Fan only"
         }
       }
+    },
+    "error": {
+      "member_already_claimed": "One or more selected thermostats already belong to another Climate Conductor."
     }
   }
 }

@@ -10,20 +10,23 @@ from homeassistant.components.climate.const import ATTR_HVAC_MODES
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN, SensorDeviceClass
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import selector
+from homeassistant.helpers import area_registry as ar, selector
 from homeassistant.helpers.schema_config_entry_flow import (
     SchemaCommonFlowHandler,
     SchemaConfigFlowHandler,
+    SchemaFlowError,
     SchemaFlowFormStep,
 )
 import voluptuous as vol
 
 from .const import (
+    CONF_AREA,
     CONF_HIDE_MEMBERS,
     CONF_HUMIDITY_SENSOR,
     CONF_MEMBERS,
     CONF_ROUTES,
     CONF_TEMPERATURE_SENSOR,
+    DEFAULT_NAME,
     DOMAIN,
 )
 
@@ -110,13 +113,30 @@ def _member_modes(hass: HomeAssistant, members: list[str]) -> dict[str, list[str
     return result
 
 
+def _claimed_members(hass: HomeAssistant, exclude_entry_id: str | None) -> set[str]:
+    """Members already belonging to another conductor entry."""
+    claimed: set[str] = set()
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.entry_id == exclude_entry_id:
+            continue
+        claimed.update({**entry.data, **entry.options}.get(CONF_MEMBERS, []))
+    return claimed
+
+
 async def _seed_auto_routes(
     handler: SchemaCommonFlowHandler, user_input: dict[str, Any]
 ) -> dict[str, Any]:
-    """After members are picked, seed the routes every member uniquely serves."""
-    auto, _ = plan_routes(
-        _member_modes(handler.parent_handler.hass, user_input[CONF_MEMBERS])
-    )
+    """After members are picked, seed the routes every member uniquely serves.
+
+    Rejects members another conductor already drives — two conductors over the
+    same device fight over routing and member visibility.
+    """
+    parent = handler.parent_handler
+    entry = getattr(parent, "config_entry", None)  # absent in the initial flow
+    claimed = _claimed_members(parent.hass, entry.entry_id if entry else None)
+    if claimed.intersection(user_input[CONF_MEMBERS]):
+        raise SchemaFlowError("member_already_claimed")
+    auto, _ = plan_routes(_member_modes(parent.hass, user_input[CONF_MEMBERS]))
     return {**user_input, CONF_ROUTES: auto}
 
 
@@ -170,9 +190,12 @@ async def _merge_contested_routes(
 
 CONFIG_FLOW = {
     "user": SchemaFlowFormStep(
-        vol.Schema({vol.Required(CONF_NAME): selector.TextSelector()}).extend(
-            BASE_SCHEMA
-        ),
+        vol.Schema(
+            {
+                vol.Required(CONF_NAME, default=DEFAULT_NAME): selector.TextSelector(),
+                vol.Required(CONF_AREA): selector.AreaSelector(),
+            }
+        ).extend(BASE_SCHEMA),
         validate_user_input=_seed_auto_routes,
         next_step="routes",
     ),
@@ -200,5 +223,8 @@ class ClimateConductorConfigFlow(SchemaConfigFlowHandler, domain=DOMAIN):
     options_flow = OPTIONS_FLOW
 
     def async_config_entry_title(self, options: Mapping[str, Any]) -> str:
-        """Return the config entry title."""
-        return cast(str, options.get(CONF_NAME, "Climate Conductor"))
+        """Compose the entry title from the chosen area and name."""
+        name = cast(str, options.get(CONF_NAME, DEFAULT_NAME))
+        area_id = options.get(CONF_AREA)
+        area = ar.async_get(self.hass).async_get_area(area_id) if area_id else None
+        return f"{area.name} {name}" if area else name

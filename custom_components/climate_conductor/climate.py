@@ -436,7 +436,16 @@ class ClimateConductor(ClimateEntity, RestoreEntity):
         context = event.context
         if context is not None and context.id.startswith(CONDUCTOR_CONTEXT_PREFIX):
             # the member's settled state rides in on our command's context;
-            # mirror it for display, but don't re-route (that would loop)
+            # mirror it for display, but don't re-route (that would loop).
+            # A preset we forwarded can move the active member's setpoint, so adopt it.
+            echoed = event.data.get("new_state")
+            if (
+                echoed is not None
+                and event.data["entity_id"] == self.active_member
+                and echoed.state == self._attr_hvac_mode
+                and (temperature := echoed.attributes.get(ATTR_TEMPERATURE)) is not None
+            ):
+                self._attr_target_temperature = temperature
             self.async_write_ha_state()
             return
 

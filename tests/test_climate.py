@@ -357,6 +357,38 @@ async def test_listener_mirrors_display_on_our_own_echoes(hass):
     assert state.attributes["temperature"] == 24.0
 
 
+async def test_listener_adopts_setpoint_moved_by_a_forwarded_preset(hass):
+    """A preset we forward can change the active member's setpoint; the echo carries
+    our context, and the group must still take the new setpoint as its own."""
+    ent = _conductor(hass, HVACMode.HEAT)
+    ent._attr_target_temperature = 22.0
+    ours = Context(id=f"{CONDUCTOR_CONTEXT_PREFIX}x")
+    await ent._member_changed(
+        _member_event(
+            "climate.floor",
+            "heat",
+            {ATTR_TEMPERATURE: 21.0, ATTR_PRESET_MODE: "sleep"},
+            context=ours,
+        )
+    )
+    assert ent.target_temperature == 21.0
+
+
+async def test_listener_ignores_setpoint_echoes_from_other_members(hass):
+    """Echoes from a member we just turned off, or one not in the group's mode,
+    must not replace the group's setpoint."""
+    ent = _conductor(hass, HVACMode.HEAT)
+    ent._attr_target_temperature = 22.0
+    ours = Context(id=f"{CONDUCTOR_CONTEXT_PREFIX}x")
+    await ent._member_changed(
+        _member_event("climate.ac", "off", {ATTR_TEMPERATURE: 25.0}, context=ours)
+    )
+    await ent._member_changed(
+        _member_event("climate.floor", "off", {ATTR_TEMPERATURE: 18.0}, context=ours)
+    )
+    assert ent.target_temperature == 22.0
+
+
 async def test_listener_adopts_active_member_setpoint(hass):
     """Same-mode setpoint change on the active member updates the group's display."""
     ent = _conductor(hass, HVACMode.HEAT)

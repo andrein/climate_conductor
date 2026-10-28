@@ -73,8 +73,9 @@ from the conductor is normalized:
 ### Echo suppression (mandatory)
 
 Every service call the conductor issues to a member carries a `Context` whose id
-is prefixed with `CONDUCTOR_CONTEXT_PREFIX`. The listener ignores any event
-whose context is one of ours. Without this, the conductor's own "turn the other
+is prefixed with `CONDUCTOR_CONTEXT_PREFIX`. The listener never re-routes on an
+event whose context is one of ours; it only refreshes the display and adopts the
+active member's setpoint, because a forwarded preset can move it. Without this, the conductor's own "turn the other
 member off" commands would be read as fresh out-of-band changes and re-trigger
 routing.
 
